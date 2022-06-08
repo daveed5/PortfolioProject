@@ -1,0 +1,154 @@
+
+-- SELECT *
+-- From `protfolioproject.CovidDeaths.CovidVaccination`
+-- order by 3, 4 
+
+--- Select Data that we are going to be using 
+
+Select Location, date, total_cases, new_cases, total_deaths, population
+From `protfolioproject.CovidDeaths.CovidDeath`
+Order By 1, 2
+
+--Looking at Total Cases vs Total Deaths
+--Select Location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+--From `protfolioproject.CovidDeaths.CovidDeath`
+Where location = 'United States'
+Order By 1, 2
+
+-- Looking at Total Cases vs Total Deathes in United States
+--Shows likelihood of dying if you contract covid in your country
+Select Location, date, total_cases, total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+From `protfolioproject.CovidDeaths.CovidDeath`
+Where location = 'United States'
+
+-- Location at the total cases vs Population 
+-- Show what percentage of population got Covid
+Select Location, date, population, total_cases, (total_cases/population)*100 as PopulationCovid
+From `protfolioproject.CovidDeaths.CovidDeath`
+Where location = 'United States'
+
+-- Looking at Countries with Highest Infection Rate compared to Population
+
+Select location, population, MAX(total_cases) as HighestInfectionCount, MAX((total_cases/population))*100 as PercentPopulationInfected
+FROM `protfolioproject.CovidDeaths.CovidDeath`
+GROUP BY location, population
+--Where location = 'United States'
+ORDER BY PercentPopulationInfected desc
+
+--Showing Country with Highest Death Count per Population
+-- We used the Max function so we can get the total amount and the CAST function so we can change the value to a different datatype
+-- We add is not null because we noticed that there were nulls in our data 
+Select location, MAX(cast(total_deaths as INT)) as TotalDeathCount
+FROM `protfolioproject.CovidDeaths.CovidDeath`
+Where continent is not null
+GROUP BY location
+--Where location = 'United States'
+ORDER BY TotalDeathCount desc
+
+-- Let's break things down by continet
+Select continent, MAX(cast(total_deaths as INT)) as TotalDeathCount
+FROM `protfolioproject.CovidDeaths.CovidDeath`
+Where continent is not null
+GROUP BY continent
+--Where location = 'United States'
+ORDER BY TotalDeathCount desc
+
+-- Location
+Select location, MAX(cast(total_deaths as INT)) as TotalDeathCount
+FROM `protfolioproject.CovidDeaths.CovidDeath`
+Where continent is null
+GROUP BY location
+--Where location = 'United States'
+ORDER BY TotalDeathCount desc
+
+-- Showing continents with the highest death count per population
+Select continent, MAX(cast(total_deaths as INT)) as TotalDeathCount
+FROM `protfolioproject.CovidDeaths.CovidDeath`
+Where continent is not null
+GROUP BY continent
+ORDER BY TotalDeathCount desc
+
+-- Global Numbers
+select date, SUM(new_cases) as TotalCases, SUM(new_deaths) as TotalDeaths, SUM(new_deaths)/SUM(new_cases)*100 as DeathPercentage--total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+from `protfolioproject.CovidDeaths.CovidDeath`
+--where location = 'United States'
+where continent is not null
+GROUP BY date
+order by 1, 2
+
+select SUM(new_cases) as TotalCases, SUM(new_deaths) as TotalDeaths, SUM(new_deaths)/SUM(new_cases)*100 as DeathPercentage--total_deaths, (total_deaths/total_cases)*100 as DeathPercentage
+from `protfolioproject.CovidDeaths.CovidDeath`
+--where location = 'United States'
+where continent is not null
+--GROUP BY date
+order by 1, 2
+
+--looking at total population vs vaccination
+-- We got the Sum of new vaccinations
+-- We used Over Partition By so we can get the SUM per country their own number if not then that number would continue to the next country
+-- We added the Order by so we can get the sum per day added to the pervious day
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as RollingPeopleVaccinated,
+(RollingPeopleVaccinated/population)*100
+FROM `protfolioproject.CovidDeaths.CovidDeath` dea
+JOIN `protfolioproject.CovidDeaths.CovidVaccination` vac
+  ON dea.location = vac.location
+  and dea.date = vac.date
+WHERE dea.continent is not null
+ORDER BY 2, 3
+
+-- Use a CTE
+
+WITH PopvsVac (Continent, Location, Date, Population, New_Vaccinations,RollingPeopleVaccinated)
+AS(
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as RollingPeopleVaccinated
+FROM `protfolioproject.CovidDeaths.CovidDeath` dea
+JOIN `protfolioproject.CovidDeaths.CovidVaccination` vac
+  ON dea.location = vac.location
+  and dea.date = vac.date
+WHERE dea.continent is not null
+--ORDER BY 2, 3
+)
+select *
+from PopvsVac
+
+--- This never worked for me
+--Syntax error: Expected keyword AS but got "(" at [2:15]
+
+
+
+--Temp Table
+Create Table PercentPopulationVaccinated
+(
+  Continent nvarchar(255),
+  Location nvarchar(255),
+  Date datetime,
+  Population numeric,
+  New_Vaccination numeric,
+  RollingPeopleVaccinated numeric
+)
+
+INSERT INTO PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as RollingPeopleVaccinated
+FROM `protfolioproject.CovidDeaths.CovidDeath` dea
+JOIN `protfolioproject.CovidDeaths.CovidVaccination` vac
+  ON dea.location = vac.location
+  and dea.date = vac.date
+WHERE dea.continent is not null
+--ORDER BY 2, 3
+
+select *, (RollingPeopleVaccinated/Population)*100
+from PercentPopulationVaccinated
+
+-- Creating View to Store Data for later visualization
+CREATE VIEW PercentPopulationVaccinated as
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location, dea.date) as RollingPeopleVaccinated
+FROM `protfolioproject.CovidDeaths.CovidDeath` dea
+JOIN `protfolioproject.CovidDeaths.CovidVaccination` vac
+  ON dea.location = vac.location
+  and dea.date = vac.date
+WHERE dea.continent is not null
+-- ORDER BY 2, 3
